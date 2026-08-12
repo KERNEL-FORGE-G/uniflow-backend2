@@ -19,7 +19,9 @@ export const bootstrapServer = async (expressInstance: any) => {
     new ExpressAdapter(expressInstance),
   );
 
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('api/v1', {
+    exclude: ['/', 'admin', 'docs', 'favicon.ico'],
+  });
 
   app.use(
     helmet({

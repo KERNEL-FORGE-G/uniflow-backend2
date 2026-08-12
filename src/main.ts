@@ -10,7 +10,9 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('api/v1', {
+    exclude: ['/', 'admin', 'docs', 'favicon.ico'],
+  });
   // Protection des en-têtes HTTP (§9.3 du CDC)
   // Assouplissement temporaire de la CSP pour permettre Swagger et les outils Vercel/Translate
   app.use(
