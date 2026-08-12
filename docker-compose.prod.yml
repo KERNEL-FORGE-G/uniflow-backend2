@@ -1,0 +1,50 @@
+# docker-compose.prod.yml
+# Déploiement en Production (VPS) — UniFlow Backend (Dev D)
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: uniflow-db-prod
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-uniflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-uniflow_prod}
+    volumes:
+      - uniflow_pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-uniflow}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - uniflow-net
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: uniflow-api-prod
+    restart: always
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-uniflow}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-uniflow_prod}
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://uniflow.univ-yaounde1.cm}
+      PORT: 3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - uniflow-net
+
+volumes:
+  uniflow_pgdata_prod:
+
+networks:
+  uniflow-net:
+    driver: bridge

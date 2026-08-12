@@ -1,0 +1,45 @@
+# docker-compose.yml
+#
+# Environnement de développement local pour le backend UniFlow.
+# Fournit une base PostgreSQL isolée pour CE développeur uniquement (règle n°5
+# du document de répartition Backend+BD) : chacun a sa propre instance locale,
+# seul le schema.prisma et les migrations sont partagés via Git — jamais les données.
+version: '3.8'
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: uniflow-db-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: uniflow
+      POSTGRES_PASSWORD: uniflow_dev_password
+      POSTGRES_DB: uniflow_dev
+    ports:
+      - '5433:5432' # 5433 en local pour ne pas entrer en conflit avec un Postgres déjà installé sur ta machine
+    volumes:
+      - uniflow_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U uniflow']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: uniflow-api-local
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      # Note : "postgres" ici est le nom du service ci-dessus, pas "localhost" —
+      # à l'intérieur du réseau Docker, les conteneurs se joignent par nom de service.
+      DATABASE_URL: postgresql://uniflow:uniflow_dev_password@postgres:5432/uniflow_dev
+      JWT_SECRET: change-moi-en-une-longue-chaine-aleatoire-et-secrete
+    depends_on:
+      postgres:
+        condition: service_healthy
+volumes:
+  uniflow_pgdata:
+    # Volume nommé : les données persistent entre redémarrages du conteneur,
+    # mais restent locales à ta machine (jamais commitées ni partagées).
