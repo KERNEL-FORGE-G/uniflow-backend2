@@ -341,6 +341,7 @@ enum DayOfWeek {
   JEUDI
   VENDREDI
   SAMEDI
+  DIMANCHE
 }
 
 model Classroom {
@@ -541,3 +542,186 @@ model Attachment {
 
   @@map("attachments")
 }
+
+// ============================================================
+// BACKEND 2 : INDÉPENDANTS / SAAS AUTO-GÉRÉ (SOLO / NEON DB)
+// ============================================================
+
+enum AccountType {
+  PERSONAL
+}
+
+enum PersonalUserRole {
+  INDEPENDENT_STUDENT
+  INDEPENDENT_TEACHER
+  TUTOR
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum PaymentCurrency {
+  XAF
+  EUR
+  USD
+}
+
+enum PaymentProvider {
+  CINETPAY
+  NOTCHPAY
+  MTN_MOMO
+  ORANGE_MONEY
+  STRIPE
+  CARD
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  COMPLETED
+}
+
+model PersonalUser {
+  id                String           @id @default(uuid())
+  email             String           @unique
+  passwordHash      String
+  firstName         String
+  lastName          String
+  role              PersonalUserRole @default(INDEPENDENT_STUDENT)
+  phone             String?
+  avatarUrl         String?
+  countryCode       String           @default("CM") @db.VarChar(5)
+  preferredCurrency PaymentCurrency  @default(XAF)
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @default(now()) @updatedAt
+
+  subscription        Subscription?
+  paymentTransactions PaymentTransaction[]
+  personalSubjects    PersonalSubject[]
+  personalSchedules   PersonalSchedule[]
+  personalGrades      PersonalGrade[]
+  personalTasks       PersonalTask[]
+
+  @@map("personal_users")
+}
+
+model Subscription {
+  id                     String             @id @default(uuid())
+  userId                 String             @unique
+  user                   PersonalUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status                 SubscriptionStatus @default(TRIAL)
+  countryCode            String             @default("CM") @db.VarChar(5)
+  currency               PaymentCurrency    @default(XAF)
+  monthlyAmount          Decimal            @default(100.00) @db.Decimal(10, 2)
+  currentPeriodStart     DateTime           @default(now())
+  currentPeriodEnd       DateTime           @default(now())
+  cancelAtPeriodEnd      Boolean            @default(false)
+  paymentProvider        PaymentProvider?   @default(NOTCHPAY)
+  externalSubscriptionId String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @default(now()) @updatedAt
+
+  paymentTransactions PaymentTransaction[]
+
+  @@map("subscriptions")
+}
+
+model PaymentTransaction {
+  id                     String          @id @default(uuid())
+  subscriptionId         String
+  subscription           Subscription    @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  userId                 String
+  user                   PersonalUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount                 Decimal         @db.Decimal(10, 2)
+  currency               PaymentCurrency
+  provider               PaymentProvider
+  providerTransactionRef String?
+  status                 String          @default("SUCCESS")
+  metadata               Json?
+  createdAt              DateTime        @default(now())
+
+  @@map("payment_transactions")
+}
+
+model PersonalSubject {
+  id             String       @id @default(uuid())
+  userId         String
+  user           PersonalUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code           String
+  name           String
+  instructorName String?
+  credits        Int?         @default(3)
+  colorHex       String?      @default("#1e3a8a")
+  semesterLabel  String?      @default("Semestre 1")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @default(now()) @updatedAt
+
+  personalSchedules PersonalSchedule[]
+  personalGrades    PersonalGrade[]
+  personalTasks     PersonalTask[]
+
+  @@map("personal_subjects")
+}
+
+model PersonalSchedule {
+  id                String          @id @default(uuid())
+  userId            String
+  user              PersonalUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId         String
+  subject           PersonalSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  dayOfWeek         DayOfWeek
+  startTime         String
+  endTime           String
+  classroomLocation String?
+  notes             String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @default(now()) @updatedAt
+
+  @@map("personal_schedules")
+}
+
+model PersonalGrade {
+  id              String          @id @default(uuid())
+  userId          String
+  user            PersonalUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId       String
+  subject         PersonalSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  evaluationTitle String
+  score           Decimal         @db.Decimal(4, 2)
+  maxScore        Decimal         @default(20.00) @db.Decimal(4, 2)
+  coefficient     Decimal         @default(1.00) @db.Decimal(3, 2)
+  evaluationDate  DateTime?       @db.Date
+  createdAt       DateTime        @default(now())
+
+  @@map("personal_grades")
+}
+
+model PersonalTask {
+  id          String           @id @default(uuid())
+  userId      String
+  user        PersonalUser     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId   String?
+  subject     PersonalSubject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  title       String
+  description String?
+  dueDate     DateTime?
+  priority    TaskPriority     @default(MEDIUM)
+  status      TaskStatus       @default(TODO)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @default(now()) @updatedAt
+
+  @@map("personal_tasks")
+}
+

@@ -21,6 +21,8 @@ import { VideoconferenceModule } from './videoconference/videoconference.module'
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { StatsModule } from './stats/stats.module';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
+import { SubscriptionModule } from './subscription/subscription.module';
+import { PersonalModule } from './personal/personal.module';
 
 @Module({
   imports: [
@@ -60,6 +62,8 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     StatsModule,
     AuditLogsModule,
     AdminToolModule,
+    SubscriptionModule,
+    PersonalModule,
   ],
   controllers: [AppController],
   providers: [
