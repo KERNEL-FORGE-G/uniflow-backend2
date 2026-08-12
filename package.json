@@ -8,6 +8,7 @@
   "scripts": {
     "postinstall": "prisma generate",
     "build": "nest build",
+    "vercel-build": "prisma generate && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "seed": "ts-node prisma/seed.ts",
     "start": "nest start",
