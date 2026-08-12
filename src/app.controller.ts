@@ -26,4 +26,10 @@ export class AppController {
   redirectDocs(@Res() res: any) {
     return res.redirect('/api/docs');
   }
+
+  @Get('favicon.ico')
+  @ApiOperation({ summary: 'Favicon' })
+  getFavicon(@Res() res: any) {
+    return res.status(204).end();
+  }
 }

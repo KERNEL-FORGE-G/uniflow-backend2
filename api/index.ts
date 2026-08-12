@@ -11,6 +11,8 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 const expressApp = express();
 
+expressApp.get('/favicon.ico', (req, res) => res.status(204).end());
+
 export const bootstrapServer = async (expressInstance: any) => {
   const app = await NestFactory.create(
     AppModule,
@@ -72,6 +74,7 @@ export const bootstrapServer = async (expressInstance: any) => {
         'http://localhost:4173',
         'https://uniflow.kernelforge.codes',
         'https://api-uniflow.kernelforge.codes',
+        'https://api2-uniflow.kernelforge.codes',
       ];
 
   app.enableCors({
