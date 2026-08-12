@@ -1,0 +1,69 @@
+# .github/workflows/ci.yml
+#
+# Pipeline CI du backend UniFlow — §11.4 du CDC.
+# Déclenché sur chaque push et chaque Pull Request vers develop ou main,
+# pour attraper les erreurs AVANT la fusion (règle de coordination : chaque
+# PR est relue par le chef d'équipe puis fusionnée sur develop).
+
+name: Backend CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    # Base de données de test éphémère, propre à ce run de CI —
+    # même principe que ta base locale, mais jetable après le job.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: uniflow
+          POSTGRES_PASSWORD: uniflow_test_password
+          POSTGRES_DB: uniflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://uniflow:uniflow_test_password@localhost:5432/uniflow_test
+
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Générer le client Prisma
+        run: npx prisma generate
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Vérifier le format (Prettier)
+        run: npx prettier --check "src/**/*.ts"
+
+      - name: Appliquer les migrations sur la base de test
+        run: npx prisma migrate deploy
+
+      - name: Tests unitaires
+        run: npm run test
+
+      - name: Build
+        run: npm run build

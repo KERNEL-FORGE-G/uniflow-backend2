@@ -1,0 +1,26 @@
+
+# Dépendances
+node_modules
+
+# Build compilé
+dist
+/dist
+
+# Variables d'environnement
+.env
+
+# Prisma généré
+/generated/prisma
+
+# Couverture de tests
+coverage
+
+# Logs
+*.log
+
+# Outils IA / assistants de code (skills auto-générés)
+.agents/
+.claude/
+.windsurf/
+.cursor/
+skills-lock.json
