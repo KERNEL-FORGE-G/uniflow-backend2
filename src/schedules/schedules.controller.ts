@@ -45,7 +45,7 @@ export class SchedulesController {
   @Post()
   @ApiOperation({ summary: 'Créer un creneau d\'emploi du temps' })
   @ApiResponse({ status: 201, description: 'Créneaux créé avec succès' })
-  @Roles('ADMIN', 'SUPER_ADMIN', 'SECRETARIAT')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'SECRETARIAT', 'ETUDIANT', 'STUDENT', 'ENSEIGNANT', 'TEACHER')
   create(@Body() dto: CreateScheduleDto) {
     return this.schedulesService.create(dto);
   }
@@ -84,7 +84,7 @@ export class SchedulesController {
   @ApiOperation({ summary: 'Mettre à jour un créneau' })
   @ApiParam({ name: 'id', description: 'ID du créneau' })
   @ApiResponse({ status: 200, description: 'Créneau mis à jour' })
-  @Roles('ADMIN', 'SUPER_ADMIN', 'SECRETARIAT')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'SECRETARIAT', 'ETUDIANT', 'STUDENT', 'ENSEIGNANT', 'TEACHER')
   update(@Param('id') id: string, @Body() dto: UpdateScheduleDto) {
     return this.schedulesService.update(id, dto);
   }
@@ -93,7 +93,7 @@ export class SchedulesController {
   @ApiOperation({ summary: 'Supprimer un créneau' })
   @ApiParam({ name: 'id', description: 'ID du créneau' })
   @ApiResponse({ status: 200, description: 'Créneau supprimé' })
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'SECRETARIAT', 'ETUDIANT', 'STUDENT', 'ENSEIGNANT', 'TEACHER')
   remove(@Param('id') id: string) {
     return this.schedulesService.remove(id);
   }

@@ -13,6 +13,23 @@ const expressApp = express();
 
 expressApp.get('/favicon.ico', (req, res) => res.status(204).end());
 
+// Redirect Swagger UI static assets to CDN to prevent 404/MIME errors in Vercel Serverless
+expressApp.get('/api/docs/swagger-ui.css', (req, res) =>
+  res.redirect('https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.0/swagger-ui.min.css'),
+);
+expressApp.get('/api/docs/swagger-ui-bundle.js', (req, res) =>
+  res.redirect('https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.0/swagger-ui-bundle.min.js'),
+);
+expressApp.get('/api/docs/swagger-ui-standalone-preset.js', (req, res) =>
+  res.redirect('https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.0/swagger-ui-standalone-preset.min.js'),
+);
+expressApp.get('/api/docs/favicon-32x32.png', (req, res) =>
+  res.redirect('https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.0/favicon-32x32.png'),
+);
+expressApp.get('/api/docs/favicon-16x16.png', (req, res) =>
+  res.redirect('https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.0/favicon-16x16.png'),
+);
+
 export const bootstrapServer = async (expressInstance: any) => {
   const app = await NestFactory.create(
     AppModule,
@@ -31,8 +48,20 @@ export const bootstrapServer = async (expressInstance: any) => {
           scriptSrc: [
             "'self'",
             "'unsafe-inline'",
+            "'unsafe-eval'",
             'https://cdnjs.cloudflare.com',
+            'https://vercel.live',
             'https://*.vercel.live',
+            'https://*.vercel.app',
+          ],
+          scriptSrcElem: [
+            "'self'",
+            "'unsafe-inline'",
+            "'unsafe-eval'",
+            'https://cdnjs.cloudflare.com',
+            'https://vercel.live',
+            'https://*.vercel.live',
+            'https://*.vercel.app',
           ],
           styleSrc: [
             "'self'",
@@ -40,15 +69,31 @@ export const bootstrapServer = async (expressInstance: any) => {
             'https://cdnjs.cloudflare.com',
             'https://translate.googleapis.com',
             'https://www.gstatic.com',
+            'https://fonts.googleapis.com',
+          ],
+          styleSrcElem: [
+            "'self'",
+            "'unsafe-inline'",
+            'https://cdnjs.cloudflare.com',
+            'https://translate.googleapis.com',
+            'https://www.gstatic.com',
+            'https://fonts.googleapis.com',
           ],
           imgSrc: [
             "'self'",
             'data:',
+            'blob:',
             'https://validator.swagger.io',
+            'https://cdnjs.cloudflare.com',
             'https://*.googleapis.com',
             'https://*.gstatic.com',
           ],
-          connectSrc: ["'self'", 'https://*.vercel.live'],
+          connectSrc: [
+            "'self'",
+            'https://vercel.live',
+            'https://*.vercel.live',
+            'https://*.vercel.app',
+          ],
         },
       },
     }),
@@ -111,13 +156,14 @@ export const bootstrapServer = async (expressInstance: any) => {
       defaultModelsExpandDepth: -1,
     },
     customSiteTitle: 'UniFlow API Documentation',
+    customfavIcon:
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.0/favicon-32x32.png',
     customJs: [
       'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.0/swagger-ui-bundle.min.js',
       'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.0/swagger-ui-standalone-preset.min.js',
     ],
-    customCssUrl: [
+    customCssUrl:
       'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.0/swagger-ui.min.css',
-    ],
   });
 
   await app.init();

@@ -49,7 +49,7 @@ export class CoursesController {
   @Post()
   @ApiOperation({ summary: 'Créer un nouveau cours' })
   @ApiResponse({ status: 201, description: 'Cours créé avec succès' })
-  @Roles('ADMIN', 'SUPER_ADMIN', 'SECRETARIAT')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'SECRETARIAT', 'ETUDIANT', 'STUDENT', 'ENSEIGNANT', 'TEACHER')
   create(@Body() dto: CreateCourseDto) {
     return this.coursesService.create(dto);
   }
@@ -80,7 +80,7 @@ export class CoursesController {
   @ApiOperation({ summary: 'Mettre à jour un cours' })
   @ApiParam({ name: 'id', description: 'ID du cours' })
   @ApiResponse({ status: 200, description: 'Cours mis à jour' })
-  @Roles('ADMIN', 'SUPER_ADMIN', 'SECRETARIAT')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'SECRETARIAT', 'ETUDIANT', 'STUDENT', 'ENSEIGNANT', 'TEACHER')
   update(@Param('id') id: string, @Body() dto: UpdateCourseDto) {
     return this.coursesService.update(id, dto);
   }
@@ -89,7 +89,7 @@ export class CoursesController {
   @ApiOperation({ summary: 'Supprimer un cours' })
   @ApiParam({ name: 'id', description: 'ID du cours' })
   @ApiResponse({ status: 200, description: 'Cours supprimé' })
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'SECRETARIAT', 'ETUDIANT', 'STUDENT', 'ENSEIGNANT', 'TEACHER')
   remove(@Param('id') id: string) {
     return this.coursesService.remove(id);
   }

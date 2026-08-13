@@ -180,7 +180,7 @@ export class SchedulesService {
     });
 
     if (teacher) {
-      return this.prisma.schedule.findMany({
+      const teacherSchedules = await this.prisma.schedule.findMany({
         where: { deletedAt: null, course: { teacherId: teacher.id } },
         include: {
           course: {
@@ -188,40 +188,59 @@ export class SchedulesService {
           },
         },
       });
+      if (teacherSchedules.length > 0) return teacherSchedules;
     }
 
     const student = await this.prisma.student.findUnique({
       where: { userId },
     });
 
-    if (!student) {
-      return [];
-    }
-
-    const enrollments = await this.prisma.enrollment.findMany({
-      where: {
-        studentId: student.id,
-        status: 'VALIDATED',
-        deletedAt: null,
-      },
-      select: { teachingUnitId: true },
-    });
-
-    if (enrollments.length === 0) {
-      return [];
-    }
-
-    return this.prisma.schedule.findMany({
-      where: {
-        deletedAt: null,
-        course: { teachingUnitId: { in: enrollments.map((e) => e.teachingUnitId) } },
-      },
-      include: {
-        course: {
-          include: { teachingUnit: true, teacher: true, classroom: true },
+    if (student) {
+      const enrollments = await this.prisma.enrollment.findMany({
+        where: {
+          studentId: student.id,
+          status: 'VALIDATED',
+          deletedAt: null,
         },
-      },
+        select: { teachingUnitId: true },
+      });
+
+      if (enrollments.length > 0) {
+        const studentSchedules = await this.prisma.schedule.findMany({
+          where: {
+            deletedAt: null,
+            course: { teachingUnitId: { in: enrollments.map((e) => e.teachingUnitId) } },
+          },
+          include: {
+            course: {
+              include: { teachingUnit: true, teacher: true, classroom: true },
+            },
+          },
+        });
+        if (studentSchedules.length > 0) return studentSchedules;
+      }
+    }
+
+    // Fallback to personal schedules
+    const personalSchedules = await this.prisma.personalSchedule.findMany({
+      where: { userId },
+      include: { subject: true },
+      orderBy: { createdAt: 'desc' },
     });
+
+    return personalSchedules.map((sch) => ({
+      id: sch.id,
+      courseId: sch.subjectId,
+      subjectId: sch.subjectId,
+      courseTitle: sch.subject?.name || 'Matière',
+      courseCode: sch.subject?.code || 'LIB',
+      dayOfWeek: sch.dayOfWeek,
+      startTime: sch.startTime,
+      endTime: sch.endTime,
+      classroom: sch.classroomLocation || 'Salle A',
+      colorHex: sch.subject?.colorHex || '#2563eb',
+      type: sch.notes || 'CM',
+    }));
   }
 
   // Génération automatique de créneaux (§10.2 et §4.7 du CDC).
