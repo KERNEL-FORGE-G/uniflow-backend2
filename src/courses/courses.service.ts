@@ -81,32 +81,46 @@ export class CoursesService {
       where: { userId },
     });
 
-    if (!student) {
-      throw new NotFoundException(
-        'Aucun profil enseignant ou étudiant associé à cet utilisateur',
-      );
+    if (student) {
+      const enrollments = await this.prisma.enrollment.findMany({
+        where: {
+          studentId: student.id,
+          status: 'VALIDATED',
+          deletedAt: null,
+        },
+        select: { teachingUnitId: true },
+      });
+
+      if (enrollments.length > 0) {
+        return this.prisma.course.findMany({
+          where: {
+            teachingUnitId: { in: enrollments.map((e) => e.teachingUnitId) },
+            deletedAt: null,
+          },
+          include: { teachingUnit: true, teacher: true, classroom: true },
+        });
+      }
     }
 
-    const enrollments = await this.prisma.enrollment.findMany({
-      where: {
-        studentId: student.id,
-        status: 'VALIDATED',
-        deletedAt: null,
-      },
-      select: { teachingUnitId: true },
+    // Fallback for independent personal user subjects
+    const personalSubjects = await this.prisma.personalSubject.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
     });
 
-    if (enrollments.length === 0) {
-      return [];
-    }
-
-    return this.prisma.course.findMany({
-      where: {
-        teachingUnitId: { in: enrollments.map((e) => e.teachingUnitId) },
-        deletedAt: null,
-      },
-      include: { teachingUnit: true, teacher: true, classroom: true },
-    });
+    return personalSubjects.map((sub) => ({
+      id: sub.id,
+      code: sub.code,
+      title: sub.name,
+      name: sub.name,
+      instructor: sub.instructorName,
+      instructorName: sub.instructorName,
+      credits: sub.credits ?? 3,
+      colorHex: sub.colorHex || '#2563eb',
+      classroom: sub.semesterLabel || 'Salle 1',
+      description: `Matière autonome - ${sub.name}`,
+      createdAt: sub.createdAt,
+    }));
   }
 
   async findOne(id: string) {

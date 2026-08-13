@@ -20,10 +20,55 @@ async function bootstrap() {
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "https://*.vercel.live"],
-          styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "https://translate.googleapis.com", "https://www.gstatic.com"],
-          imgSrc: ["'self'", "data:", "https://validator.swagger.io", "https://*.googleapis.com", "https://*.gstatic.com"],
-          connectSrc: ["'self'", "https://*.vercel.live"],
+          scriptSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            "'unsafe-eval'",
+            'https://cdnjs.cloudflare.com',
+            'https://vercel.live',
+            'https://*.vercel.live',
+            'https://*.vercel.app',
+          ],
+          scriptSrcElem: [
+            "'self'",
+            "'unsafe-inline'",
+            "'unsafe-eval'",
+            'https://cdnjs.cloudflare.com',
+            'https://vercel.live',
+            'https://*.vercel.live',
+            'https://*.vercel.app',
+          ],
+          styleSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            'https://cdnjs.cloudflare.com',
+            'https://translate.googleapis.com',
+            'https://www.gstatic.com',
+            'https://fonts.googleapis.com',
+          ],
+          styleSrcElem: [
+            "'self'",
+            "'unsafe-inline'",
+            'https://cdnjs.cloudflare.com',
+            'https://translate.googleapis.com',
+            'https://www.gstatic.com',
+            'https://fonts.googleapis.com',
+          ],
+          imgSrc: [
+            "'self'",
+            'data:',
+            'blob:',
+            'https://validator.swagger.io',
+            'https://cdnjs.cloudflare.com',
+            'https://*.googleapis.com',
+            'https://*.gstatic.com',
+          ],
+          connectSrc: [
+            "'self'",
+            'https://vercel.live',
+            'https://*.vercel.live',
+            'https://*.vercel.app',
+          ],
         },
       },
     }),
@@ -89,13 +134,14 @@ async function bootstrap() {
       defaultModelsExpandDepth: -1,
     },
     customSiteTitle: 'UniFlow API Documentation',
+    customfavIcon:
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.0/favicon-32x32.png',
     customJs: [
       'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.0/swagger-ui-bundle.min.js',
-      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.0/swagger-ui-standalone-preset.min.js'
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.0/swagger-ui-standalone-preset.min.js',
     ],
-    customCssUrl: [
-      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.0/swagger-ui.min.css'
-    ],
+    customCssUrl:
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.0/swagger-ui.min.css',
   });
 
   await app.listen(process.env.PORT ?? 3000);

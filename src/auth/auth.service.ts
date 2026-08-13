@@ -30,36 +30,72 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
 
+    let firstName = dto.firstName || '';
+    let lastName = dto.lastName || '';
+    if (dto.fullName && (!firstName || !lastName)) {
+      const parts = dto.fullName.trim().split(/\s+/);
+      firstName = parts[0] || 'Utilisateur';
+      lastName = parts.slice(1).join(' ') || firstName;
+    }
+    if (!firstName) firstName = 'Utilisateur';
+    if (!lastName) lastName = 'Indépendant';
+
+    let userRole = UserRole.ETUDIANT;
+    const roleUpper = (dto.role || '').toUpperCase();
+    if (roleUpper === 'TEACHER' || roleUpper === 'ENSEIGNANT' || roleUpper === 'INDEPENDENT_TEACHER') {
+      userRole = UserRole.ENSEIGNANT;
+    } else if (roleUpper === 'ADMIN' || roleUpper === 'SUPER_ADMIN') {
+      userRole = UserRole.ADMIN;
+    }
+
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
         passwordHash,
-        role: dto.role,
+        role: userRole,
       },
     });
 
-    if (dto.role === 'ETUDIANT') {
+    if (userRole === UserRole.ETUDIANT) {
       const levelId = dto.levelId ?? (await this.findOrCreateDefaultLevel());
 
       await this.prisma.student.create({
         data: {
           userId: user.id,
-          firstName: dto.firstName,
-          lastName: dto.lastName,
+          firstName,
+          lastName,
           matricule: await this.generateMatricule(),
           levelId,
           specialtyId: dto.specialtyId,
         },
       });
-    } else if (dto.role === 'ENSEIGNANT') {
+    } else if (userRole === UserRole.ENSEIGNANT) {
       await this.prisma.teacher.create({
         data: {
           userId: user.id,
-          firstName: dto.firstName,
-          lastName: dto.lastName,
+          firstName,
+          lastName,
         },
       });
     }
+
+    // Also sync/create PersonalUser for independent features
+    await this.prisma.personalUser.upsert({
+      where: { email: dto.email },
+      create: {
+        id: user.id,
+        email: dto.email,
+        passwordHash,
+        firstName,
+        lastName,
+        countryCode: dto.countryCode || 'CM',
+        preferredCurrency: (dto.countryCode || 'CM').toUpperCase() === 'CM' ? 'XAF' : 'EUR',
+      },
+      update: {
+        firstName,
+        lastName,
+      },
+    });
 
     return this.buildAuthResponse(user.id);
   }
@@ -265,10 +301,27 @@ export class AuthService {
       | null;
     teacher: { id: string; firstName: string; lastName: string } | null;
   }) {
+    const firstName = user.student?.firstName || user.teacher?.firstName || 'Utilisateur';
+    const lastName = user.student?.lastName || user.teacher?.lastName || 'Indépendant';
+    const fullName = `${firstName} ${lastName}`.trim();
+
+    const normalizedRole =
+      user.role === 'ETUDIANT'
+        ? 'STUDENT'
+        : user.role === 'ENSEIGNANT'
+          ? 'TEACHER'
+          : user.role;
+
     return {
       id: user.id,
       email: user.email,
-      role: user.role,
+      fullName,
+      firstName,
+      lastName,
+      role: normalizedRole,
+      accountCategory: 'PERSONAL',
+      countryCode: 'CM',
+      subscriptionStatus: 'ACTIVE',
       student: user.student
         ? {
             id: user.student.id,

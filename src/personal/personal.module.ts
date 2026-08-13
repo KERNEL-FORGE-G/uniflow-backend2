@@ -4,6 +4,7 @@ import {
   PersonalSchedulesController,
   PersonalGradesController,
   PersonalTasksController,
+  AssignmentsController,
 } from './personal.controller';
 import { PersonalService } from './personal.service';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -15,6 +16,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     PersonalSchedulesController,
     PersonalGradesController,
     PersonalTasksController,
+    AssignmentsController,
   ],
   providers: [PersonalService],
   exports: [PersonalService],

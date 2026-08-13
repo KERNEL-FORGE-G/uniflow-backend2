@@ -18,6 +18,13 @@ export class SubscriptionController {
   constructor(private readonly subscriptionService: SubscriptionService) {}
 
   @Public()
+  @Get('plans')
+  @ApiOperation({ summary: 'Lister les offres d abonnement disponibles en BD' })
+  getPlans() {
+    return this.subscriptionService.getPlans();
+  }
+
+  @Public()
   @Get('pricing')
   @ApiOperation({ summary: 'Obtenir la grille tarifaire selon le pays' })
   @ApiQuery({ name: 'countryCode', required: false, example: 'CM' })

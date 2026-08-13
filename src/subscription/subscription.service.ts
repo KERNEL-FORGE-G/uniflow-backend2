@@ -7,6 +7,57 @@ import { PaymentCurrency, PaymentProvider, SubscriptionStatus } from '@prisma/cl
 export class SubscriptionService {
   constructor(private prisma: PrismaService) {}
 
+  getPlans() {
+    return [
+      {
+        id: 'plan_pass_student',
+        code: 'pass-etudiant',
+        name: 'Pass Étudiant',
+        category: 'PERSONAL',
+        priceMonthly: '100 FCFA / mois',
+        priceAnnually: '1 000 FCFA / an',
+        amountXAF: 100,
+        amountEUR: 1.0,
+        period: 'Facturé mensuellement',
+        description:
+          "L'essentiel pour booster votre réussite académique personnelle.",
+        features: [
+          'Gestion autonome illimitée des cours & notes',
+          'Emploi du temps interactif modifiable',
+          'Calculateur automatique de moyenne GPA',
+          'Mode hors-ligne PWA & Synchronisation',
+          'Support prioritaire WhatsApp',
+        ],
+        btnText: 'Souscrire à cette offre',
+        btnVariant: 'teal',
+        highlight: true,
+        badge: 'Offre Populaire',
+      },
+      {
+        id: 'plan_teacher_pro',
+        code: 'enseignant-pro',
+        name: 'Pack Enseignant Pro',
+        category: 'TEACHER',
+        priceMonthly: '500 FCFA / mois',
+        priceAnnually: '5 000 FCFA / an',
+        amountXAF: 500,
+        amountEUR: 3.0,
+        period: 'Facturé mensuellement',
+        description:
+          'Solution complète pour enseignants indépendants et vacataires.',
+        features: [
+          'Gestion de multiples classes & étudiants',
+          "Génération automatique d'emplois du temps",
+          'Cahier de texte & suivi des présences',
+          'Export PDF des relevés et bilans',
+        ],
+        btnText: "Choisir l'offre Enseignant",
+        btnVariant: 'primary',
+        highlight: false,
+      },
+    ];
+  }
+
   getPricing(countryCode: string = 'CM') {
     const code = countryCode.toUpperCase();
     if (code === 'CM') {
@@ -114,6 +165,7 @@ export class SubscriptionService {
       if (sub) {
         return {
           status: sub.status,
+          planCode: 'pass-etudiant',
           countryCode: sub.countryCode,
           currency: sub.currency,
           monthlyAmount: Number(sub.monthlyAmount),
@@ -123,9 +175,10 @@ export class SubscriptionService {
       }
     }
 
-    // Default response matching docu.md
+    // Default response matching specs
     return {
       status: 'ACTIVE',
+      planCode: 'pass-etudiant',
       countryCode: 'CM',
       currency: 'XAF',
       monthlyAmount: 100,

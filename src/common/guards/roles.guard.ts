@@ -39,6 +39,18 @@ export class RolesGuard implements CanActivate {
       return false;
     }
 
-    return requiredRoles.includes(user.role);
+    const userRole = user.role;
+    const equivalentRoles = new Set<string>([userRole]);
+
+    if (userRole === 'ETUDIANT' || userRole === 'STUDENT') {
+      equivalentRoles.add('ETUDIANT');
+      equivalentRoles.add('STUDENT');
+    }
+    if (userRole === 'ENSEIGNANT' || userRole === 'TEACHER') {
+      equivalentRoles.add('ENSEIGNANT');
+      equivalentRoles.add('TEACHER');
+    }
+
+    return requiredRoles.some((role) => equivalentRoles.has(role));
   }
 }
