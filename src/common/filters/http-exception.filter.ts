@@ -1,7 +1,7 @@
 import {
-  ExceptionFilter,
-  Catch,
   ArgumentsHost,
+  Catch,
+  ExceptionFilter,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
@@ -12,20 +12,41 @@ interface HttpExceptionResponse {
   [key: string]: unknown;
 }
 
-@Catch(HttpException)
+function isDatabaseFailure(exception: unknown): boolean {
+  if (!(exception instanceof Error)) return false;
+  const name = exception.name.toLowerCase();
+  const message = exception.message.toLowerCase();
+  return name.includes('prisma')
+    || message.includes('database')
+    || message.includes('connection')
+    || message.includes('relation')
+    || message.includes('postgres')
+    || message.includes('neon');
+}
+
+@Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
-  catch(exception: HttpException, host: ArgumentsHost) {
+  catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
-    const status = exception.getStatus() ?? HttpStatus.INTERNAL_SERVER_ERROR;
+    const databaseFailure = isDatabaseFailure(exception);
+    const status = exception instanceof HttpException
+      ? exception.getStatus()
+      : databaseFailure
+        ? HttpStatus.SERVICE_UNAVAILABLE
+        : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const exceptionResponse = exception.getResponse();
-    const message: string | string[] =
-      typeof exceptionResponse === 'string'
+    let message: string | string[] = databaseFailure
+      ? 'La base de données est temporairement indisponible. Vérifiez la connexion Neon du backend puis réessayez.'
+      : 'Erreur interne du serveur.';
+
+    if (exception instanceof HttpException) {
+      const exceptionResponse = exception.getResponse();
+      message = typeof exceptionResponse === 'string'
         ? exceptionResponse
-        : ((exceptionResponse as HttpExceptionResponse).message ??
-          exception.message);
+        : ((exceptionResponse as HttpExceptionResponse).message ?? exception.message);
+    }
 
     response.status(status).json({
       success: false,
