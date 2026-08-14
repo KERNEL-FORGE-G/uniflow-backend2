@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
+import { UpdateProfileDto, normalizeProfileUpdate } from './dto/update-profile.dto';
 
 @Injectable()
 export class AuthService {
@@ -134,6 +135,42 @@ export class AuthService {
       include: { subscription: true },
     });
     return this.buildUserProfile(user, personalUser);
+  }
+
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const normalized = normalizeProfileUpdate(dto);
+    const existing = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!existing) throw new UnauthorizedException('Utilisateur introuvable');
+
+    if (normalized.email && normalized.email !== existing.email) {
+      const emailOwner = await this.prisma.user.findUnique({ where: { email: normalized.email } });
+      if (emailOwner && emailOwner.id !== userId) {
+        throw new ConflictException('Cet email est déjà utilisé par un autre compte');
+      }
+    }
+
+    const personalUser = await this.prisma.personalUser.findUnique({ where: { id: userId } });
+    if (!personalUser) {
+      throw new BadRequestException('Cette route est réservée aux comptes personnels.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (normalized.email && normalized.email !== existing.email) {
+        await tx.user.update({ where: { id: userId }, data: { email: normalized.email } });
+        await tx.personalUser.update({ where: { id: userId }, data: { email: normalized.email } });
+      }
+
+      const personalData: Record<string, string> = {};
+      if (normalized.firstName) personalData.firstName = normalized.firstName;
+      if (normalized.lastName) personalData.lastName = normalized.lastName;
+      if (normalized.countryCode) personalData.countryCode = normalized.countryCode;
+      if (normalized.preferredCurrency) personalData.preferredCurrency = normalized.preferredCurrency;
+      if (Object.keys(personalData).length > 0) {
+        await tx.personalUser.update({ where: { id: userId }, data: personalData });
+      }
+    });
+
+    return this.me(userId);
   }
 
   async getAcademicOptions() {

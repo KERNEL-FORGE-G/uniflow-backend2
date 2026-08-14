@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Post,
+  Patch,
   Get,
   Query,
   HttpCode,
@@ -21,6 +22,7 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 interface AuthenticatedRequest extends ExpressRequest {
@@ -93,6 +95,15 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async specialties(@Query('levelId') levelId?: string) {
     return this.authService.getSpecialties(levelId);
+  }
+
+  @Patch('me')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Modifier le profil du compte connecté' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Profil utilisateur mis à jour' })
+  async updateMe(@Request() req: AuthenticatedRequest, @Body() dto: UpdateProfileDto) {
+    return this.authService.updateProfile(req.user.userId, dto);
   }
 
   @Get('me')
