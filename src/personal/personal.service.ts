@@ -1,33 +1,27 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class PersonalService {
   constructor(private prisma: PrismaService) {}
 
-  private async getOrCreateUserId(userId?: string): Promise<string> {
-    if (userId) return userId;
-
-    let user = await this.prisma.personalUser.findFirst();
-    if (!user) {
-      user = await this.prisma.personalUser.create({
-        data: {
-          id: 'pusr_cm_1',
-          email: 'jean.independant@gmail.com',
-          passwordHash: 'hashed_pwd',
-          firstName: 'Jean',
-          lastName: 'Nguea',
-          countryCode: 'CM',
-          preferredCurrency: 'XAF',
-        },
-      });
+  private async requireUserId(userId?: string): Promise<string> {
+    if (!userId) {
+      throw new UnauthorizedException('Une session JWT est requise pour accéder aux données personnelles.');
+    }
+    const user = await this.prisma.personalUser.findUnique({
+      where: { id: userId },
+      select: { id: true, isActive: true },
+    });
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Compte personnel introuvable ou désactivé.');
     }
     return user.id;
   }
 
   // --- MATIÈRES / COURS ---
   async getSubjects(userId?: string) {
-    const targetUserId = await this.getOrCreateUserId(userId);
+    const targetUserId = await this.requireUserId(userId);
     const subjects = await this.prisma.personalSubject.findMany({
       where: { userId: targetUserId },
       orderBy: { createdAt: 'desc' },
@@ -40,16 +34,16 @@ export class PersonalService {
       title: sub.name,
       instructorName: sub.instructorName,
       instructor: sub.instructorName,
-      credits: sub.credits ?? 3,
-      colorHex: sub.colorHex || '#10b981',
-      classroom: sub.semesterLabel || 'Salle A',
-      semesterLabel: sub.semesterLabel || 'Semestre 1',
+      credits: sub.credits ?? undefined,
+      colorHex: sub.colorHex ?? undefined,
+      classroom: sub.semesterLabel ?? undefined,
+      semesterLabel: sub.semesterLabel ?? undefined,
       createdAt: sub.createdAt,
     }));
   }
 
   async getSubjectById(id: string, userId?: string) {
-    const targetUserId = await this.getOrCreateUserId(userId);
+    const targetUserId = await this.requireUserId(userId);
     const sub = await this.prisma.personalSubject.findFirst({
       where: { id, userId: targetUserId },
     });
@@ -63,18 +57,22 @@ export class PersonalService {
       title: sub.name,
       instructorName: sub.instructorName,
       instructor: sub.instructorName,
-      credits: sub.credits ?? 3,
-      colorHex: sub.colorHex || '#10b981',
-      classroom: sub.semesterLabel || 'Salle A',
+      credits: sub.credits ?? undefined,
+      colorHex: sub.colorHex ?? undefined,
+      classroom: sub.semesterLabel ?? undefined,
+      semesterLabel: sub.semesterLabel ?? undefined,
       createdAt: sub.createdAt,
     };
   }
 
   async createSubject(dto: any, userId?: string) {
-    const targetUserId = await this.getOrCreateUserId(userId);
-    const name = dto.name || dto.title || 'Matière Sans Titre';
-    const instructorName = dto.instructorName || dto.instructor || 'Enseignant Inconnu';
-    const code = dto.code || `MAT${Math.floor(100 + Math.random() * 900)}`;
+    const targetUserId = await this.requireUserId(userId);
+    const name = dto.name || dto.title;
+    const code = dto.code;
+    if (!name || !code) {
+      throw new BadRequestException('Le code et le nom du cours sont obligatoires.');
+    }
+    const instructorName = dto.instructorName ?? dto.instructor ?? null;
 
     const sub = await this.prisma.personalSubject.create({
       data: {
@@ -82,9 +80,9 @@ export class PersonalService {
         code,
         name,
         instructorName,
-        credits: dto.credits ? Number(dto.credits) : 3,
-        colorHex: dto.colorHex || '#10b981',
-        semesterLabel: dto.classroom || dto.semesterLabel || 'Semestre 1',
+        credits: dto.credits !== undefined ? Number(dto.credits) : undefined,
+        colorHex: dto.colorHex ?? undefined,
+        semesterLabel: dto.classroom ?? dto.semesterLabel ?? undefined,
       },
     });
 
@@ -103,7 +101,7 @@ export class PersonalService {
   }
 
   async updateSubject(id: string, dto: any, userId?: string) {
-    const targetUserId = await this.getOrCreateUserId(userId);
+    const targetUserId = await this.requireUserId(userId);
     await this.getSubjectById(id, targetUserId);
 
     const dataToUpdate: any = {};
@@ -136,7 +134,7 @@ export class PersonalService {
   }
 
   async deleteSubject(id: string, userId?: string) {
-    const targetUserId = await this.getOrCreateUserId(userId);
+    const targetUserId = await this.requireUserId(userId);
     await this.getSubjectById(id, targetUserId);
     await this.prisma.personalSubject.delete({ where: { id } });
     return { message: 'Cours/Matière supprimé(e) avec succès', id };
@@ -144,7 +142,7 @@ export class PersonalService {
 
   // --- EMPLOI DU TEMPS ---
   async getSchedules(userId?: string) {
-    const targetUserId = await this.getOrCreateUserId(userId);
+    const targetUserId = await this.requireUserId(userId);
     const schedules = await this.prisma.personalSchedule.findMany({
       where: { userId: targetUserId },
       include: { subject: true },
@@ -155,46 +153,38 @@ export class PersonalService {
       id: sch.id,
       courseId: sch.subjectId,
       subjectId: sch.subjectId,
-      courseTitle: sch.subject?.name || 'Matière',
-      courseCode: sch.subject?.code || 'INF101',
+      courseTitle: sch.subject?.name ?? undefined,
+      courseCode: sch.subject?.code ?? undefined,
       dayOfWeek: sch.dayOfWeek,
       startTime: sch.startTime,
       endTime: sch.endTime,
-      classroom: sch.classroomLocation || 'Amphi A',
-      classroomLocation: sch.classroomLocation || 'Amphi A',
-      colorHex: sch.subject?.colorHex || '#2563eb',
-      type: sch.notes || 'CM',
+      classroom: sch.classroomLocation ?? undefined,
+      classroomLocation: sch.classroomLocation ?? undefined,
+      colorHex: sch.subject?.colorHex ?? undefined,
+      type: sch.notes ?? undefined,
       notes: sch.notes,
     }));
   }
 
   async createSchedule(dto: any, userId?: string) {
-    const targetUserId = await this.getOrCreateUserId(userId);
-    let subjectId = dto.subjectId || dto.courseId;
-
+    const targetUserId = await this.requireUserId(userId);
+    const subjectId = dto.subjectId || dto.courseId;
     if (!subjectId) {
-      let firstSubject = await this.prisma.personalSubject.findFirst({
-        where: { userId: targetUserId },
-      });
-      if (!firstSubject) {
-        firstSubject = await this.prisma.personalSubject.create({
-          data: {
-            userId: targetUserId,
-            code: 'INF201',
-            name: dto.courseTitle || 'Algorithmique',
-            credits: 4,
-            colorHex: dto.colorHex || '#2563eb',
-          },
-        });
-      }
-      subjectId = firstSubject.id;
+      throw new BadRequestException('Une matière personnelle est obligatoire pour créer un créneau.');
+    }
+    const subject = await this.prisma.personalSubject.findFirst({ where: { id: subjectId, userId: targetUserId } });
+    if (!subject) {
+      throw new BadRequestException('La matière sélectionnée n’appartient pas à ce compte personnel.');
     }
 
-    const dayOfWeek = (dto.dayOfWeek || 'LUNDI').toUpperCase();
-    const startTime = dto.startTime || '08:00';
-    const endTime = dto.endTime || '10:00';
-    const classroomLocation = dto.classroomLocation || dto.classroom || 'Amphi 350';
-    const notes = dto.type || dto.notes || 'CM';
+    const dayOfWeek = dto.dayOfWeek?.toUpperCase();
+    const startTime = dto.startTime;
+    const endTime = dto.endTime;
+    if (!dayOfWeek || !startTime || !endTime) {
+      throw new BadRequestException('Le jour, l’heure de début et l’heure de fin sont obligatoires.');
+    }
+    const classroomLocation = dto.classroomLocation ?? dto.classroom ?? null;
+    const notes = dto.type ?? dto.notes ?? null;
 
     const sch = await this.prisma.personalSchedule.create({
       data: {
@@ -213,8 +203,8 @@ export class PersonalService {
       id: sch.id,
       courseId: sch.subjectId,
       subjectId: sch.subjectId,
-      courseTitle: sch.subject?.name || 'Matière',
-      courseCode: sch.subject?.code || 'INF101',
+      courseTitle: sch.subject?.name ?? undefined,
+      courseCode: sch.subject?.code ?? undefined,
       dayOfWeek: sch.dayOfWeek,
       startTime: sch.startTime,
       endTime: sch.endTime,
@@ -225,7 +215,7 @@ export class PersonalService {
   }
 
   async updateSchedule(id: string, dto: any, userId?: string) {
-    const targetUserId = await this.getOrCreateUserId(userId);
+    const targetUserId = await this.requireUserId(userId);
     const existing = await this.prisma.personalSchedule.findFirst({
       where: { id, userId: targetUserId },
     });
@@ -240,8 +230,17 @@ export class PersonalService {
     if (dto.classroom || dto.classroomLocation)
       dataToUpdate.classroomLocation = dto.classroom || dto.classroomLocation;
     if (dto.type || dto.notes) dataToUpdate.notes = dto.type || dto.notes;
-    if (dto.courseId || dto.subjectId)
-      dataToUpdate.subjectId = dto.courseId || dto.subjectId;
+    if (dto.courseId || dto.subjectId) {
+      const subjectId = dto.courseId || dto.subjectId;
+      const subject = await this.prisma.personalSubject.findFirst({ where: { id: subjectId, userId: targetUserId } });
+      if (!subject) {
+        throw new BadRequestException('La matière sélectionnée n’appartient pas à ce compte personnel.');
+      }
+      dataToUpdate.subjectId = subjectId;
+    }
+    if (Object.keys(dataToUpdate).length === 0) {
+      throw new BadRequestException('Aucune donnée valide à mettre à jour.');
+    }
 
     const sch = await this.prisma.personalSchedule.update({
       where: { id },
@@ -253,8 +252,8 @@ export class PersonalService {
       id: sch.id,
       courseId: sch.subjectId,
       subjectId: sch.subjectId,
-      courseTitle: sch.subject?.name || 'Matière',
-      courseCode: sch.subject?.code || 'INF101',
+      courseTitle: sch.subject?.name ?? undefined,
+      courseCode: sch.subject?.code ?? undefined,
       dayOfWeek: sch.dayOfWeek,
       startTime: sch.startTime,
       endTime: sch.endTime,
@@ -265,7 +264,7 @@ export class PersonalService {
   }
 
   async deleteSchedule(id: string, userId?: string) {
-    const targetUserId = await this.getOrCreateUserId(userId);
+    const targetUserId = await this.requireUserId(userId);
     const existing = await this.prisma.personalSchedule.findFirst({
       where: { id, userId: targetUserId },
     });
@@ -278,7 +277,7 @@ export class PersonalService {
 
   // --- NOTES & CALCULATOR ---
   async getGrades(userId?: string) {
-    const targetUserId = await this.getOrCreateUserId(userId);
+    const targetUserId = await this.requireUserId(userId);
     const grades = await this.prisma.personalGrade.findMany({
       where: { userId: targetUserId },
       include: { subject: true },
@@ -300,34 +299,27 @@ export class PersonalService {
   }
 
   async createGrade(dto: any, userId?: string) {
-    const targetUserId = await this.getOrCreateUserId(userId);
-    let subjectId = dto.subjectId || dto.courseId;
-
-    if (!subjectId) {
-      let firstSubject = await this.prisma.personalSubject.findFirst({
-        where: { userId: targetUserId },
-      });
-      if (!firstSubject) {
-        firstSubject = await this.prisma.personalSubject.create({
-          data: {
-            userId: targetUserId,
-            code: 'INF101',
-            name: 'Matière Générale',
-            credits: 3,
-          },
-        });
-      }
-      subjectId = firstSubject.id;
+    const targetUserId = await this.requireUserId(userId);
+    const subjectId = dto.subjectId || dto.courseId;
+    if (!subjectId || !dto.evaluationTitle) {
+      throw new BadRequestException('La matière et l’intitulé de l’évaluation sont obligatoires.');
+    }
+    const subject = await this.prisma.personalSubject.findFirst({ where: { id: subjectId, userId: targetUserId } });
+    if (!subject) {
+      throw new BadRequestException('La matière sélectionnée n’appartient pas à ce compte personnel.');
+    }
+    if (dto.score === undefined || !Number.isFinite(Number(dto.score))) {
+      throw new BadRequestException('La note obtenue est obligatoire et doit être numérique.');
     }
 
     const g = await this.prisma.personalGrade.create({
       data: {
         userId: targetUserId,
         subjectId,
-        evaluationTitle: dto.evaluationTitle || dto.title || 'Évaluation',
-        score: dto.score ? Number(dto.score) : 10.0,
-        maxScore: dto.maxScore ? Number(dto.maxScore) : 20.0,
-        coefficient: dto.coefficient ? Number(dto.coefficient) : 1.0,
+        evaluationTitle: dto.evaluationTitle,
+        score: Number(dto.score),
+        ...(dto.maxScore !== undefined ? { maxScore: Number(dto.maxScore) } : {}),
+        ...(dto.coefficient !== undefined ? { coefficient: Number(dto.coefficient) } : {}),
         evaluationDate: dto.evaluationDate ? new Date(dto.evaluationDate) : null,
       },
       include: { subject: true },
@@ -347,7 +339,7 @@ export class PersonalService {
   }
 
   async updateGrade(id: string, dto: any, userId?: string) {
-    const targetUserId = await this.getOrCreateUserId(userId);
+    const targetUserId = await this.requireUserId(userId);
     const existing = await this.prisma.personalGrade.findFirst({
       where: { id, userId: targetUserId },
     });
@@ -362,6 +354,11 @@ export class PersonalService {
     if (dto.maxScore !== undefined) dataToUpdate.maxScore = Number(dto.maxScore);
     if (dto.coefficient !== undefined)
       dataToUpdate.coefficient = Number(dto.coefficient);
+    if (dto.evaluationDate !== undefined)
+      dataToUpdate.evaluationDate = dto.evaluationDate ? new Date(dto.evaluationDate) : null;
+    if (Object.keys(dataToUpdate).length === 0) {
+      throw new BadRequestException('Aucune donnée valide à mettre à jour.');
+    }
 
     const g = await this.prisma.personalGrade.update({
       where: { id },
@@ -382,7 +379,7 @@ export class PersonalService {
   }
 
   async deleteGrade(id: string, userId?: string) {
-    const targetUserId = await this.getOrCreateUserId(userId);
+    const targetUserId = await this.requireUserId(userId);
     const existing = await this.prisma.personalGrade.findFirst({
       where: { id, userId: targetUserId },
     });
@@ -395,7 +392,7 @@ export class PersonalService {
 
   // --- TÂCHES & DEVOIRS ---
   async getTasks(userId?: string) {
-    const targetUserId = await this.getOrCreateUserId(userId);
+    const targetUserId = await this.requireUserId(userId);
     const tasks = await this.prisma.personalTask.findMany({
       where: { userId: targetUserId },
       include: { subject: true },
@@ -417,8 +414,17 @@ export class PersonalService {
   }
 
   async createTask(dto: any, userId?: string) {
-    const targetUserId = await this.getOrCreateUserId(userId);
-    const subjectId = dto.subjectId || dto.courseId || null;
+    const targetUserId = await this.requireUserId(userId);
+    const subjectId = dto.subjectId || dto.courseId;
+    if (!dto.title) {
+      throw new BadRequestException('Le titre du devoir est obligatoire.');
+    }
+    if (subjectId) {
+      const subject = await this.prisma.personalSubject.findFirst({ where: { id: subjectId, userId: targetUserId } });
+      if (!subject) {
+        throw new BadRequestException('La matière sélectionnée n’appartient pas à ce compte personnel.');
+      }
+    }
 
     let priority = dto.priority || 'MEDIUM';
     if (typeof priority === 'string') priority = priority.toUpperCase();
@@ -430,7 +436,7 @@ export class PersonalService {
       data: {
         userId: targetUserId,
         subjectId,
-        title: dto.title || 'Devoir',
+        title: dto.title,
         description: dto.description || null,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
         priority: priority as any,
@@ -454,7 +460,7 @@ export class PersonalService {
   }
 
   async updateTask(id: string, dto: any, userId?: string) {
-    const targetUserId = await this.getOrCreateUserId(userId);
+    const targetUserId = await this.requireUserId(userId);
     const existing = await this.prisma.personalTask.findFirst({
       where: { id, userId: targetUserId },
     });
@@ -470,6 +476,17 @@ export class PersonalService {
     if (dto.status) dataToUpdate.status = dto.status.toUpperCase();
     if (dto.completed !== undefined) {
       dataToUpdate.status = dto.completed ? 'COMPLETED' : 'TODO';
+    }
+    if (dto.subjectId !== undefined || dto.courseId !== undefined) {
+      const subjectId = dto.subjectId || dto.courseId || null;
+      if (subjectId) {
+        const subject = await this.prisma.personalSubject.findFirst({ where: { id: subjectId, userId: targetUserId } });
+        if (!subject) throw new BadRequestException('La matière sélectionnée n’appartient pas à ce compte personnel.');
+      }
+      dataToUpdate.subjectId = subjectId;
+    }
+    if (Object.keys(dataToUpdate).length === 0) {
+      throw new BadRequestException('Aucune donnée valide à mettre à jour.');
     }
 
     const t = await this.prisma.personalTask.update({
@@ -493,7 +510,7 @@ export class PersonalService {
   }
 
   async deleteTask(id: string, userId?: string) {
-    const targetUserId = await this.getOrCreateUserId(userId);
+    const targetUserId = await this.requireUserId(userId);
     const existing = await this.prisma.personalTask.findFirst({
       where: { id, userId: targetUserId },
     });

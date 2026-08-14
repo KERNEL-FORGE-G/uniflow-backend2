@@ -52,9 +52,9 @@ model User {
   student Student?
   teacher Teacher?
 
-  notifications             Notification[]
-  hostedConferences         VideoConference[]
-  conferenceParticipations  ConferenceParticipant[]
+  notifications            Notification[]
+  hostedConferences        VideoConference[]
+  conferenceParticipations ConferenceParticipant[]
 
   @@map("users")
 }
@@ -105,7 +105,7 @@ model Teacher {
 // ============================================================
 
 model Faculty {
-  id          String   @id @default(uuid())
+  id          String  @id @default(uuid())
   name        String
   nameEn      String?
   description String?
@@ -528,17 +528,17 @@ enum EntityType {
 }
 
 model Attachment {
-  id        String     @id @default(uuid())
-  url       String
-  publicId  String
-  filename  String
-  mimeType  String
-  size      Int
-  
+  id       String @id @default(uuid())
+  url      String
+  publicId String
+  filename String
+  mimeType String
+  size     Int
+
   entityType EntityType
   entityId   String
-  
-  createdAt DateTime   @default(now())
+
+  createdAt DateTime @default(now())
 
   @@map("attachments")
 }
@@ -558,6 +558,7 @@ enum PersonalUserRole {
 }
 
 enum SubscriptionStatus {
+  PENDING
   TRIAL
   ACTIVE
   PAST_DUE
@@ -617,11 +618,39 @@ model PersonalUser {
   @@map("personal_users")
 }
 
+model SubscriptionPlan {
+  id               String            @id @default(uuid())
+  code             String            @unique
+  name             String
+  category         String
+  description      String?
+  priceMonthlyXaf  Decimal           @db.Decimal(10, 2)
+  priceAnnuallyXaf Decimal           @db.Decimal(10, 2)
+  priceMonthlyEur  Decimal           @db.Decimal(10, 2)
+  priceAnnuallyEur Decimal           @db.Decimal(10, 2)
+  period           String?
+  features         Json
+  providers        PaymentProvider[]
+  btnText          String?
+  btnVariant       String?
+  highlight        Boolean           @default(false)
+  badge            String?
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
+}
+
 model Subscription {
   id                     String             @id @default(uuid())
   userId                 String             @unique
   user                   PersonalUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status                 SubscriptionStatus @default(TRIAL)
+  planCode               String?
+  plan                   SubscriptionPlan?  @relation(fields: [planCode], references: [code], onDelete: SetNull)
+  status                 SubscriptionStatus @default(PENDING)
   countryCode            String             @default("CM") @db.VarChar(5)
   currency               PaymentCurrency    @default(XAF)
   monthlyAmount          Decimal            @default(100.00) @db.Decimal(10, 2)
@@ -648,7 +677,7 @@ model PaymentTransaction {
   currency               PaymentCurrency
   provider               PaymentProvider
   providerTransactionRef String?
-  status                 String          @default("SUCCESS")
+  status                 String          @default("PENDING")
   metadata               Json?
   createdAt              DateTime        @default(now())
 
@@ -686,8 +715,8 @@ model PersonalSchedule {
   endTime           String
   classroomLocation String?
   notes             String?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @default(now()) @updatedAt
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @default(now()) @updatedAt
 
   @@map("personal_schedules")
 }
@@ -724,4 +753,3 @@ model PersonalTask {
 
   @@map("personal_tasks")
 }
-

@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { PersonalUserRole, SubscriptionStatus, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -40,13 +41,13 @@ export class AuthService {
     if (!firstName) firstName = 'Utilisateur';
     if (!lastName) lastName = 'Indépendant';
 
-    let userRole = UserRole.ETUDIANT;
     const roleUpper = (dto.role || '').toUpperCase();
-    if (roleUpper === 'TEACHER' || roleUpper === 'ENSEIGNANT' || roleUpper === 'INDEPENDENT_TEACHER') {
-      userRole = UserRole.ENSEIGNANT;
-    } else if (roleUpper === 'ADMIN' || roleUpper === 'SUPER_ADMIN') {
-      userRole = UserRole.ADMIN;
-    }
+    const personalRole = roleUpper === 'TEACHER' || roleUpper === 'ENSEIGNANT' || roleUpper === 'INDEPENDENT_TEACHER'
+      ? PersonalUserRole.INDEPENDENT_TEACHER
+      : PersonalUserRole.INDEPENDENT_STUDENT;
+    const userRole: UserRole = personalRole === PersonalUserRole.INDEPENDENT_TEACHER
+      ? UserRole.ENSEIGNANT
+      : UserRole.ETUDIANT;
 
     const user = await this.prisma.user.create({
       data: {
@@ -56,44 +57,18 @@ export class AuthService {
       },
     });
 
-    if (userRole === UserRole.ETUDIANT) {
-      const levelId = dto.levelId ?? (await this.findOrCreateDefaultLevel());
-
-      await this.prisma.student.create({
-        data: {
-          userId: user.id,
-          firstName,
-          lastName,
-          matricule: await this.generateMatricule(),
-          levelId,
-          specialtyId: dto.specialtyId,
-        },
-      });
-    } else if (userRole === UserRole.ENSEIGNANT) {
-      await this.prisma.teacher.create({
-        data: {
-          userId: user.id,
-          firstName,
-          lastName,
-        },
-      });
-    }
-
-    // Also sync/create PersonalUser for independent features
-    await this.prisma.personalUser.upsert({
-      where: { email: dto.email },
-      create: {
+    // Backend 2 is dedicated to PERSONAL accounts: no academic level, matricule,
+    // faculty or institutional profile is fabricated during registration.
+    await this.prisma.personalUser.create({
+      data: {
         id: user.id,
         email: dto.email,
         passwordHash,
         firstName,
         lastName,
+        role: personalRole,
         countryCode: dto.countryCode || 'CM',
         preferredCurrency: (dto.countryCode || 'CM').toUpperCase() === 'CM' ? 'XAF' : 'EUR',
-      },
-      update: {
-        firstName,
-        lastName,
       },
     });
 
@@ -154,7 +129,11 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Utilisateur introuvable');
     }
-    return this.buildUserProfile(user);
+    const personalUser = await this.prisma.personalUser.findUnique({
+      where: { id: user.id },
+      include: { subscription: true },
+    });
+    return this.buildUserProfile(user, personalUser);
   }
 
   async getAcademicOptions() {
@@ -263,10 +242,15 @@ export class AuthService {
       data: { refreshTokenHash },
     });
 
+    const personalUser = await this.prisma.personalUser.findUnique({
+      where: { id: user.id },
+      include: { subscription: true },
+    });
+
     return {
       accessToken,
       refreshToken,
-      user: this.buildUserProfile(user),
+      user: this.buildUserProfile(user, personalUser),
     };
   }
 
@@ -285,32 +269,37 @@ export class AuthService {
     });
   }
 
-  private buildUserProfile(user: {
-    id: string;
-    email: string;
-    role: string;
-    student:
-      | {
-          id: string;
-          firstName: string;
-          lastName: string;
-          matricule: string;
-          level?: { name: string } | null;
-          specialty?: { name: string } | null;
-        }
-      | null;
-    teacher: { id: string; firstName: string; lastName: string } | null;
-  }) {
-    const firstName = user.student?.firstName || user.teacher?.firstName || 'Utilisateur';
-    const lastName = user.student?.lastName || user.teacher?.lastName || 'Indépendant';
+  private buildUserProfile(
+    user: {
+      id: string;
+      email: string;
+      role: string;
+      student:
+        | {
+            id: string;
+            firstName: string;
+            lastName: string;
+            matricule: string;
+            level?: { name: string } | null;
+            specialty?: { name: string } | null;
+          }
+        | null;
+      teacher: { id: string; firstName: string; lastName: string } | null;
+    },
+    personalUser?: {
+      firstName: string;
+      lastName: string;
+      role: PersonalUserRole;
+      countryCode: string;
+      subscription?: { status: SubscriptionStatus } | null;
+    } | null,
+  ) {
+    const firstName = personalUser?.firstName || user.student?.firstName || user.teacher?.firstName || 'Utilisateur';
+    const lastName = personalUser?.lastName || user.student?.lastName || user.teacher?.lastName || 'Indépendant';
     const fullName = `${firstName} ${lastName}`.trim();
-
-    const normalizedRole =
-      user.role === 'ETUDIANT'
-        ? 'STUDENT'
-        : user.role === 'ENSEIGNANT'
-          ? 'TEACHER'
-          : user.role;
+    const normalizedRole = personalUser?.role === PersonalUserRole.INDEPENDENT_TEACHER || user.role === 'ENSEIGNANT'
+      ? 'TEACHER'
+      : 'STUDENT';
 
     return {
       id: user.id,
@@ -320,8 +309,8 @@ export class AuthService {
       lastName,
       role: normalizedRole,
       accountCategory: 'PERSONAL',
-      countryCode: 'CM',
-      subscriptionStatus: 'ACTIVE',
+      countryCode: personalUser?.countryCode || 'CM',
+      subscriptionStatus: personalUser?.subscription?.status,
       student: user.student
         ? {
             id: user.student.id,

@@ -1,189 +1,214 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { PaymentCurrency, PaymentProvider, Prisma, SubscriptionStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CheckoutDto } from './dto/checkout.dto';
-import { PaymentCurrency, PaymentProvider, SubscriptionStatus } from '@prisma/client';
 
 @Injectable()
 export class SubscriptionService {
   constructor(private prisma: PrismaService) {}
 
-  getPlans() {
-    return [
-      {
-        id: 'plan_pass_student',
-        code: 'pass-etudiant',
-        name: 'Pass Étudiant',
-        category: 'PERSONAL',
-        priceMonthly: '100 FCFA / mois',
-        priceAnnually: '1 000 FCFA / an',
-        amountXAF: 100,
-        amountEUR: 1.0,
-        period: 'Facturé mensuellement',
-        description:
-          "L'essentiel pour booster votre réussite académique personnelle.",
-        features: [
-          'Gestion autonome illimitée des cours & notes',
-          'Emploi du temps interactif modifiable',
-          'Calculateur automatique de moyenne GPA',
-          'Mode hors-ligne PWA & Synchronisation',
-          'Support prioritaire WhatsApp',
-        ],
-        btnText: 'Souscrire à cette offre',
-        btnVariant: 'teal',
-        highlight: true,
-        badge: 'Offre Populaire',
-      },
-      {
-        id: 'plan_teacher_pro',
-        code: 'enseignant-pro',
-        name: 'Pack Enseignant Pro',
-        category: 'TEACHER',
-        priceMonthly: '500 FCFA / mois',
-        priceAnnually: '5 000 FCFA / an',
-        amountXAF: 500,
-        amountEUR: 3.0,
-        period: 'Facturé mensuellement',
-        description:
-          'Solution complète pour enseignants indépendants et vacataires.',
-        features: [
-          'Gestion de multiples classes & étudiants',
-          "Génération automatique d'emplois du temps",
-          'Cahier de texte & suivi des présences',
-          'Export PDF des relevés et bilans',
-        ],
-        btnText: "Choisir l'offre Enseignant",
-        btnVariant: 'primary',
-        highlight: false,
-      },
-    ];
+  async getPlans() {
+    const plans = await this.prisma.subscriptionPlan.findMany({
+      where: { isActive: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (plans.length === 0) {
+      throw new ServiceUnavailableException('Aucun plan d’abonnement actif n’est configuré.');
+    }
+
+    return plans.map((plan) => this.serializePlan(plan));
   }
 
-  getPricing(countryCode: string = 'CM') {
-    const code = countryCode.toUpperCase();
-    if (code === 'CM') {
-      return {
-        countryCode: 'CM',
-        currency: 'XAF',
-        amount: 100,
-        formattedPrice: '100 FCFA / mois',
-        billingInterval: 'MONTHLY',
-        providers: ['MTN_MOMO', 'ORANGE_MONEY', 'NOTCHPAY'],
-      };
+  async getPricing(countryCode = 'CM') {
+    const code = countryCode.trim().toUpperCase();
+    const plans = await this.prisma.subscriptionPlan.findMany({
+      where: { isActive: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const plan = plans.find((item) => item.category === 'PERSONAL') ?? plans[0];
+    if (!plan) {
+      throw new ServiceUnavailableException('Aucun plan d’abonnement actif n’est configuré.');
     }
+
+    const currency = code === 'CM' ? PaymentCurrency.XAF : PaymentCurrency.EUR;
+    const amount = currency === PaymentCurrency.XAF
+      ? Number(plan.priceMonthlyXaf)
+      : Number(plan.priceMonthlyEur);
+    const xafProviders: PaymentProvider[] = [PaymentProvider.MTN_MOMO, PaymentProvider.ORANGE_MONEY, PaymentProvider.NOTCHPAY, PaymentProvider.CINETPAY];
+    const eurProviders: PaymentProvider[] = [PaymentProvider.STRIPE, PaymentProvider.CARD];
+    const providers = plan.providers.filter((provider) =>
+      currency === PaymentCurrency.XAF ? xafProviders.includes(provider) : eurProviders.includes(provider),
+    );
 
     return {
       countryCode: code,
-      currency: 'EUR',
-      amount: 1.00,
-      formattedPrice: '1,00 € / mois',
+      currency,
+      amount,
+      formattedPrice: currency === PaymentCurrency.XAF ? `${amount} FCFA / mois` : `${amount.toFixed(2).replace('.', ',')} € / mois`,
       billingInterval: 'MONTHLY',
-      providers: ['STRIPE', 'CARD'],
+      providers,
     };
   }
 
   async checkout(dto: CheckoutDto, userId?: string) {
-    const isCM = dto.countryCode?.toUpperCase() === 'CM';
-    const txId = `tx_${isCM ? 'cm' : 'eur'}_${Date.now()}`;
-
-    let targetUserId = userId;
-    if (!targetUserId) {
-      // Find or create default personal user if none provided
-      let user = await this.prisma.personalUser.findFirst();
-      if (!user) {
-        user = await this.prisma.personalUser.create({
-          data: {
-            email: 'demo.solo@uniflow.app',
-            passwordHash: 'hashed_demo_pwd',
-            firstName: 'Jean',
-            lastName: 'Independant',
-            countryCode: dto.countryCode || 'CM',
-            preferredCurrency: isCM ? PaymentCurrency.XAF : PaymentCurrency.EUR,
-          },
-        });
-      }
-      targetUserId = user.id;
+    if (!userId) {
+      throw new UnauthorizedException('Une session JWT est requise pour initier un paiement.');
     }
 
-    // Ensure user subscription record exists
-    let sub = await this.prisma.subscription.findUnique({
-      where: { userId: targetUserId },
+    const user = await this.prisma.personalUser.findUnique({
+      where: { id: userId },
+      select: { id: true, isActive: true, countryCode: true },
     });
-
-    if (!sub) {
-      sub = await this.prisma.subscription.create({
-        data: {
-          userId: targetUserId,
-          status: SubscriptionStatus.TRIAL,
-          countryCode: dto.countryCode || 'CM',
-          currency: isCM ? PaymentCurrency.XAF : PaymentCurrency.EUR,
-          monthlyAmount: isCM ? 100.0 : 1.0,
-          paymentProvider: dto.paymentProvider || (isCM ? PaymentProvider.NOTCHPAY : PaymentProvider.STRIPE),
-        },
-      });
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Compte personnel introuvable ou désactivé.');
     }
 
-    // Record transaction
-    await this.prisma.paymentTransaction.create({
-      data: {
-        id: txId,
-        subscriptionId: sub.id,
-        userId: targetUserId,
-        amount: isCM ? 100.0 : 1.0,
-        currency: isCM ? PaymentCurrency.XAF : PaymentCurrency.EUR,
-        provider: dto.paymentProvider || (isCM ? PaymentProvider.NOTCHPAY : PaymentProvider.STRIPE),
-        status: 'PENDING',
-        metadata: { phoneNumber: dto.phoneNumber || null },
+    const plan = await this.prisma.subscriptionPlan.findFirst({
+      where: {
+        code: dto.planCode,
+        isActive: true,
+      },
+    });
+    if (!plan) {
+      throw new NotFoundException('Le plan d’abonnement demandé est introuvable ou inactif.');
+    }
+
+    const countryCode = (dto.countryCode || user.countryCode || 'CM').toUpperCase();
+    const currency = countryCode === 'CM' ? PaymentCurrency.XAF : PaymentCurrency.EUR;
+    const provider = dto.paymentProvider ?? plan.providers[0];
+    if (!provider || !plan.providers.includes(provider)) {
+      throw new BadRequestException('Le moyen de paiement n’est pas disponible pour ce plan.');
+    }
+    if ((provider === PaymentProvider.MTN_MOMO || provider === PaymentProvider.ORANGE_MONEY) && !dto.phoneNumber) {
+      throw new BadRequestException('Un numéro de téléphone est requis pour ce moyen de paiement.');
+    }
+
+    const billingCycle = dto.billingCycle ?? 'monthly';
+    const amount = currency === PaymentCurrency.XAF
+      ? billingCycle === 'annually' ? Number(plan.priceAnnuallyXaf) : Number(plan.priceMonthlyXaf)
+      : billingCycle === 'annually' ? Number(plan.priceAnnuallyEur) : Number(plan.priceMonthlyEur);
+
+    const subscription = await this.prisma.subscription.upsert({
+      where: { userId },
+      create: {
+        userId,
+        planCode: plan.code,
+        status: SubscriptionStatus.PENDING,
+        countryCode,
+        currency,
+        monthlyAmount: currency === PaymentCurrency.XAF ? Number(plan.priceMonthlyXaf) : Number(plan.priceMonthlyEur),
+        paymentProvider: provider,
+      },
+      update: {
+        planCode: plan.code,
+        status: SubscriptionStatus.PENDING,
+        countryCode,
+        currency,
+        monthlyAmount: currency === PaymentCurrency.XAF ? Number(plan.priceMonthlyXaf) : Number(plan.priceMonthlyEur),
+        paymentProvider: provider,
       },
     });
 
-    const paymentUrl = isCM
-      ? `https://pay.notchpay.co/checkout/${txId}`
-      : `https://checkout.stripe.com/pay/${txId}`;
+    const transaction = await this.prisma.paymentTransaction.create({
+      data: {
+        subscriptionId: subscription.id,
+        userId,
+        amount,
+        currency,
+        provider,
+        status: 'PENDING',
+        metadata: {
+          billingCycle,
+          phoneNumber: dto.phoneNumber ?? null,
+          planCode: plan.code,
+        } satisfies Prisma.InputJsonValue,
+      },
+    });
 
     return {
-      transactionId: txId,
-      paymentUrl,
+      transactionId: transaction.id,
       status: 'PENDING',
-      message: isCM
-        ? 'Veuillez valider le retrait Mobile Money sur votre téléphone.'
-        : 'Redirection vers la page de paiement sécurisée par carte.',
+      message: 'Transaction enregistrée. La confirmation dépend du prestataire de paiement configuré.',
     };
   }
 
   async getStatus(userId?: string) {
-    let targetUserId = userId;
-    if (!targetUserId) {
-      const user = await this.prisma.personalUser.findFirst();
-      if (user) targetUserId = user.id;
+    if (!userId) {
+      throw new UnauthorizedException('Une session JWT est requise pour consulter un abonnement.');
     }
 
-    if (targetUserId) {
-      const sub = await this.prisma.subscription.findUnique({
-        where: { userId: targetUserId },
-      });
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { userId },
+      include: { plan: true },
+    });
 
-      if (sub) {
-        return {
-          status: sub.status,
-          planCode: 'pass-etudiant',
-          countryCode: sub.countryCode,
-          currency: sub.currency,
-          monthlyAmount: Number(sub.monthlyAmount),
-          currentPeriodEnd: sub.currentPeriodEnd.toISOString(),
-          isAutoRenew: !sub.cancelAtPeriodEnd,
-        };
-      }
+    if (!subscription) {
+      return {
+        status: 'NONE',
+        planCode: null,
+        countryCode: null,
+        currency: null,
+        monthlyAmount: null,
+        currentPeriodEnd: null,
+        isAutoRenew: false,
+      };
     }
 
-    // Default response matching specs
     return {
-      status: 'ACTIVE',
-      planCode: 'pass-etudiant',
-      countryCode: 'CM',
-      currency: 'XAF',
-      monthlyAmount: 100,
-      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      isAutoRenew: true,
+      status: subscription.status,
+      planCode: subscription.planCode,
+      countryCode: subscription.countryCode,
+      currency: subscription.currency,
+      monthlyAmount: Number(subscription.monthlyAmount),
+      currentPeriodEnd: subscription.currentPeriodEnd.toISOString(),
+      isAutoRenew: !subscription.cancelAtPeriodEnd,
+    };
+  }
+
+  private serializePlan(plan: {
+    id: string;
+    code: string;
+    name: string;
+    category: string;
+    description: string | null;
+    priceMonthlyXaf: Prisma.Decimal;
+    priceAnnuallyXaf: Prisma.Decimal;
+    priceMonthlyEur: Prisma.Decimal;
+    priceAnnuallyEur: Prisma.Decimal;
+    period: string | null;
+    features: Prisma.JsonValue;
+    providers: PaymentProvider[];
+    btnText: string | null;
+    btnVariant: string | null;
+    highlight: boolean;
+    badge: string | null;
+  }) {
+    return {
+      id: plan.id,
+      code: plan.code,
+      name: plan.name,
+      category: plan.category,
+      priceMonthly: `${Number(plan.priceMonthlyXaf)} FCFA / mois`,
+      priceAnnually: `${Number(plan.priceAnnuallyXaf)} FCFA / an`,
+      priceMonthlyAmount: Number(plan.priceMonthlyXaf),
+      priceAnnuallyAmount: Number(plan.priceAnnuallyXaf),
+      amountXAF: Number(plan.priceMonthlyXaf),
+      amountEUR: Number(plan.priceMonthlyEur),
+      period: plan.period ?? 'Tarif configuré en base de données',
+      description: plan.description ?? '',
+      features: Array.isArray(plan.features) ? plan.features : [],
+      providers: plan.providers,
+      btnText: plan.btnText ?? 'Souscrire à cette offre',
+      btnVariant: plan.btnVariant ?? 'primary',
+      highlight: plan.highlight,
+      badge: plan.badge ?? undefined,
     };
   }
 }

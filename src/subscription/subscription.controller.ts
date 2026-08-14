@@ -11,6 +11,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 import { SubscriptionService } from './subscription.service';
 import { CheckoutDto } from './dto/checkout.dto';
 import { Public } from '../common/decorators/public.decorator';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @ApiTags('Subscription & Pricing')
 @Controller('subscription')
@@ -32,16 +33,18 @@ export class SubscriptionController {
     return this.subscriptionService.getPricing(countryCode);
   }
 
-  @Public()
   @Post('checkout')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Initier un paiement d abonnement' })
   checkout(@Body() dto: CheckoutDto, @Req() req: any) {
     const userId = req.user?.userId;
     return this.subscriptionService.checkout(dto, userId);
   }
 
-  @Public()
   @Get('status')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Vérifier le statut de abonnement de l utilisateur' })
   getStatus(@Req() req: any) {
     const userId = req.user?.userId;
