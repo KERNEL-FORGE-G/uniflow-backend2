@@ -13,6 +13,13 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1', {
     exclude: ['/', 'admin', 'docs', 'favicon.ico'],
   });
+  // Compatibilité avec les anciens bundles frontend qui appellent /api/auth/*.
+  app.use((req, _res, next) => {
+    if (req.url.startsWith('/api/auth/')) {
+      req.url = `/api/v1${req.url.slice('/api'.length)}`;
+    }
+    next();
+  });
   // Protection des en-têtes HTTP (§9.3 du CDC)
   // Assouplissement temporaire de la CSP pour permettre Swagger et les outils Vercel/Translate
   app.use(
