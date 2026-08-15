@@ -11,6 +11,14 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 const expressApp = express();
 
+// Compatibilité avec les bundles frontend qui utilisent encore /api/auth/*.
+expressApp.use((req, _res, next) => {
+  if (req.url.startsWith('/api/auth/')) {
+    req.url = `/api/v1${req.url.slice('/api'.length)}`;
+  }
+  next();
+});
+
 expressApp.get('/favicon.ico', (req, res) => res.status(204).end());
 
 // Redirect Swagger UI static assets to CDN to prevent 404/MIME errors in Vercel Serverless
