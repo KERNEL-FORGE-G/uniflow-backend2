@@ -19,13 +19,13 @@ export class AppController {
   @ApiOperation({ summary: 'État de configuration du runtime' })
   @ApiResponse({ status: 200, description: 'État public sans secret' })
   getHealth() {
-    const databaseConfigured = Boolean(
-      process.env.DATABASE_URL
+    const databaseUrl = process.env.DATABASE_URL
       || process.env.POSTGRES_PRISMA_URL
       || process.env.POSTGRES_URL
       || process.env.DATABASE_URL_UNPOOLED
-      || process.env.NEON_DATABASE_URL,
-    );
+      || process.env.NEON_DATABASE_URL
+      || '';
+    const databaseConfigured = /^postgres(?:ql)?:\/\//i.test(databaseUrl.trim());
     return {
       success: true,
       data: {
