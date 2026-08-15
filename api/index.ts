@@ -11,15 +11,11 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 const expressApp = express();
 
-// Compatibilité avec les clients qui utilisent des endpoints `/api/*` sans version.
-// Les chemins versionnés et Swagger restent inchangés.
+// `/api` est le préfixe public canonique. Les anciens appels `/api/v1/*`
+// sont réécrits vers le même endpoint pour préserver la compatibilité.
 expressApp.use((req, _res, next) => {
-  if (
-    req.url.startsWith('/api/') &&
-    !req.url.startsWith('/api/v1/') &&
-    !req.url.startsWith('/api/docs')
-  ) {
-    req.url = `/api/v1${req.url.slice('/api'.length)}`;
+  if (req.url.startsWith('/api/v1/')) {
+    req.url = `/api${req.url.slice('/api/v1'.length)}`;
   }
   next();
 });
@@ -49,7 +45,7 @@ export const bootstrapServer = async (expressInstance: any) => {
     new ExpressAdapter(expressInstance),
   );
 
-  app.setGlobalPrefix('api/v1', {
+  app.setGlobalPrefix('api', {
     exclude: ['/', 'admin', 'docs', 'favicon.ico'],
   });
 
