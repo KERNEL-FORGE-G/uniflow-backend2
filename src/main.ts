@@ -13,9 +13,13 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1', {
     exclude: ['/', 'admin', 'docs', 'favicon.ico'],
   });
-  // Compatibilité avec les anciens bundles frontend qui appellent /api/auth/*.
+  // Compatibilité avec les clients qui utilisent des endpoints `/api/*` sans version.
   app.use((req, _res, next) => {
-    if (req.url.startsWith('/api/auth/')) {
+    if (
+      req.url.startsWith('/api/') &&
+      !req.url.startsWith('/api/v1/') &&
+      !req.url.startsWith('/api/docs')
+    ) {
       req.url = `/api/v1${req.url.slice('/api'.length)}`;
     }
     next();

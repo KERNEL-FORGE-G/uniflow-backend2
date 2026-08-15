@@ -11,9 +11,14 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 const expressApp = express();
 
-// Compatibilité avec les bundles frontend qui utilisent encore /api/auth/*.
+// Compatibilité avec les clients qui utilisent des endpoints `/api/*` sans version.
+// Les chemins versionnés et Swagger restent inchangés.
 expressApp.use((req, _res, next) => {
-  if (req.url.startsWith('/api/auth/')) {
+  if (
+    req.url.startsWith('/api/') &&
+    !req.url.startsWith('/api/v1/') &&
+    !req.url.startsWith('/api/docs')
+  ) {
     req.url = `/api/v1${req.url.slice('/api'.length)}`;
   }
   next();
