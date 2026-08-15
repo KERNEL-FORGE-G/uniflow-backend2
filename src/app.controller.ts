@@ -2,11 +2,15 @@ import { Controller, Get, Res } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { AppService } from './app.service';
+import { AppwriteService } from './appwrite/appwrite.service';
 
 @ApiTags('00 - Système & Santé')
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+  constructor(
+    private readonly appService: AppService,
+    private readonly appwriteService: AppwriteService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Vérification de l\'état de l\'API (Health Check)' })
@@ -34,6 +38,13 @@ export class AppController {
         databaseConfigured,
       },
     };
+  }
+
+  @Get('health/appwrite')
+  @ApiOperation({ summary: 'Connectivité Appwrite sans données sensibles' })
+  @ApiResponse({ status: 200, description: 'État de la base et du stockage Appwrite' })
+  async getAppwriteHealth() {
+    return this.appwriteService.status();
   }
 
   @Get('admin')

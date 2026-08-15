@@ -23,12 +23,14 @@ import { StatsModule } from './stats/stats.module';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { PersonalModule } from './personal/personal.module';
+import { AppwriteModule } from './appwrite/appwrite.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    AppwriteModule,
     ThrottlerModule.forRoot([
       {
         name: 'short',
